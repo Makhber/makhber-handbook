@@ -1,0 +1,65 @@
+name: Generate HTML/PDF
+
+on:
+  push:
+    tags:
+      - "*"
+jobs:
+  generate:
+    name: Generate
+    runs-on: ubuntu-20.04
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Get Version
+        id: version
+        run: |
+          VERSION=$(git describe --tags)
+          echo $VERSION
+          echo "::set-output name=version::$VERSION"
+
+      - name: Install prerequisties
+        run: |
+          sudo apt install -y --no-install-recommends \
+            xsltproc \
+            docbook-xsl \
+            docbook-xml \
+            fop
+
+      - name: Generating HTML
+        continue-on-error: true
+        run: |
+          xsltproc \
+            -xinclude \
+            -o index.html /usr/share/xml/docbook/stylesheet/docbook-xsl/html/docbook.xsl \
+            docbook-en/index.docbook
+
+      - name: Generating pdf
+        continue-on-error: true
+        run: |
+          xsltproc \
+            -xinclude \
+            -o handbook.fo /usr/share/xml/docbook/stylesheet/docbook-xsl/fo/docbook.xsl \
+            docbook-en/index.docbook
+          fop handbook.fo -pdf scidavis_handbook.pdf
+          rm handbook.fo
+
+      - name: Packaging
+        continue-on-error: true
+        run: |
+          rm -r docbook-en
+          zip -r -9 -v scidavis_handbook_html.zip * -x *.pdf
+          tar --exclude=*.zip --exclude=*.pdf -czvf scidavis_handbook_html.tar.gz *
+
+      - name: Upload Generated documentation
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          name: SciDAVis Handbook ${{ steps.version.outputs.version }}
+          draft: true
+          files: |
+            *.pdf
+            *.zip
+            *.tar.gz
